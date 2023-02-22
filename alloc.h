@@ -181,7 +181,7 @@ inline size_t alloc::M_freelist_index(size_t bytes)
 
 // 重新填充 free list
 void* alloc::M_refill(size_t n)
-{
+{//如果想申请n字节的空间，会直接分配1个或多个n字节大小的区块
   size_t nblock = 10;
   char* c = M_chunk_alloc(n, nblock);
   FreeList* my_free_list;
@@ -191,19 +191,19 @@ void* alloc::M_refill(size_t n)
     return c;
   // 否则把一个区块给调用者，剩下的纳入 free list 作为新节点
   my_free_list = free_list[M_freelist_index(n)];
-  result = (FreeList*)c;
-  my_free_list = next = (FreeList*)(c + n);
+  result = (FreeList*)c;//仍然是返回第一个区块
+  my_free_list = next = (FreeList*)(c + n);//c + n是第一个区块空间的下一个地址，也就是第二个区块的起始地址
   for (size_t i = 1; ; ++i)
-  {
+  {//逐个放入链表中
     cur = next;
-    next = (FreeList*)((char*)next + n);
+    next = (FreeList*)((char*)next + n);//下一个区块的起始地址
     if (nblock - 1 == i)
-    {
+    {//cur已经是最后一个区块了
       cur->next = nullptr;
       break;
     }
     else
-    {
+    {//链接起来
       cur->next = next;
     }
   }
@@ -267,13 +267,14 @@ char* alloc::M_chunk_alloc(size_t size, size_t& nblock)
           end_free = start_free + i;
           return M_chunk_alloc(size, nblock);
         }
-        //没有空闲块
+        //没有空闲块，寻找更大的空间
       }
+      //如果前面一直没有返回说明链表里面也没有足够空间
       std::printf("out of memory");
       end_free = nullptr;
-      throw std::bad_alloc();
+      throw std::bad_alloc();//抛出异常
     }
-    end_free = start_free + bytes_to_get;
+    end_free = start_free + bytes_to_get;//堆空间够得话，直接进入下一层递归分配
     heap_size += bytes_to_get;
     return M_chunk_alloc(size, nblock);
   }

@@ -7,7 +7,7 @@
 
 namespace mystl
 {
-
+	//#define后面的"\"是续行符,表示下面一行是紧接着当前行的,一般用于将十分长的代码语句分几段写(语句本身要求必须是一行)。
 #define MYSTL_DEBUG(expr) \
   assert(expr)  
 

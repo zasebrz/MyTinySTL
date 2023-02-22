@@ -19,10 +19,10 @@ namespace mystl
 template <class CharType>
 struct char_traits
 {
-  typedef CharType char_type;
+  typedef CharType char_type;//这里的char_type是指char、wchar、char16、char32
   
   static size_t length(const char_type* str)
-  {
+  {//string底层是字符数组，以字符0结尾，所以计算string长度的时候是计算字符个数
     size_t len = 0;
     for (; *str != char_type(0); ++str)
       ++len;
@@ -35,7 +35,7 @@ struct char_traits
     {
       if (*s1 < *s2)
         return -1;
-      if (*s2 < *s1)
+      if (*s2 < *s1)//这里不用大于的原因是有些类重载了小于号而没有重载大于号
         return 1;
     }
     return 0;
@@ -44,6 +44,9 @@ struct char_traits
   static char_type* copy(char_type* dst, const char_type* src, size_t n)
   {
     MYSTL_DEBUG(src + n <= dst || dst + n <= src);
+    //这里调用了assert宏定义，如果它里面的条件返回错误，代码会终止运行，并且会把源文件，错误的代码，以及行号，都输出来。
+    //正确的话就继续运行
+    //这里是说两块地址不能重叠
     char_type* r = dst;
     for (; n != 0; --n, ++dst, ++src)
       *dst = *src;
@@ -53,13 +56,14 @@ struct char_traits
   static char_type* move(char_type* dst, const char_type* src, size_t n)
   {
     char_type* r = dst;
+    //注意这里对于空间重叠的处理
     if (dst < src)
-    {
+    {//目标地址小于源地址，那么可以直接复制过去
       for (; n != 0; --n, ++dst, ++src)
         *dst = *src;
     }
     else if (src < dst)
-    {
+    {//目标地址大于源地址，就应该从后往前复制，避免把未复制的字符给覆盖了
       dst += n;
       src += n;
       for (; n != 0; --n)
@@ -79,7 +83,7 @@ struct char_traits
 
 // Partialized. char_traits<char>
 template <> 
-struct char_traits<char>
+struct char_traits<char>//针对char的特例化版本，比上一个类模板快
 {
   typedef char char_type;
 
@@ -278,7 +282,7 @@ public:
   typedef mystl::allocator<CharType>               allocator_type;
   typedef mystl::allocator<CharType>               data_allocator;
 
-  typedef typename allocator_type::value_type      value_type;
+  typedef typename allocator_type::value_type      value_type;//实际上就是CharType
   typedef typename allocator_type::pointer         pointer;
   typedef typename allocator_type::const_pointer   const_pointer;
   typedef typename allocator_type::reference       reference;
@@ -286,12 +290,13 @@ public:
   typedef typename allocator_type::size_type       size_type;
   typedef typename allocator_type::difference_type difference_type;
 
-  typedef value_type*                              iterator;
+  typedef value_type*                              iterator;//把底层指针命名为迭代器
   typedef const value_type*                        const_iterator;
   typedef mystl::reverse_iterator<iterator>        reverse_iterator;
   typedef mystl::reverse_iterator<const_iterator>  const_reverse_iterator;
 
-  allocator_type get_allocator() { return allocator_type(); }
+  allocator_type get_allocator() { return allocator_type(); }//allocator_type是实例化的类，加括号以后就是构造一个对象
+  //这里用的是合成的构造函数
 
   static_assert(std::is_pod<CharType>::value, "Character type of basic_string must be a POD");
   static_assert(std::is_same<CharType, typename traits_type::char_type>::value,
