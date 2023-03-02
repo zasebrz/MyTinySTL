@@ -18,7 +18,8 @@ namespace mystl
 
 template <class CharType>
 struct char_traits
-{
+{//这是一个空间分配器，对其内部的空间有以下几种操作，注意以下的操作都是在内存上直接操作的，不需要对象的参与
+    //相反，对象的某些方法需要借助以下操作来实现
   typedef CharType char_type;//这里的char_type是指char、wchar、char16、char32
   
   static size_t length(const char_type* str)
@@ -279,7 +280,7 @@ public:
   typedef CharTraits                               traits_type;
   typedef CharTraits                               char_traits;
 
-  typedef mystl::allocator<CharType>               allocator_type;
+  typedef mystl::allocator<CharType>               allocator_type;//对于不同的对象，内存分配器的类型也不相同
   typedef mystl::allocator<CharType>               data_allocator;
 
   typedef typename allocator_type::value_type      value_type;//实际上就是CharType
@@ -297,8 +298,9 @@ public:
 
   allocator_type get_allocator() { return allocator_type(); }//allocator_type是实例化的类，加括号以后就是构造一个对象
   //这里用的是合成的构造函数
-
+  //assert是运行时断言，只有在执行到assert时才会进行判断。而static_assert是在编译时进行断言。所以断言的条件必须是编译时即可确定
   static_assert(std::is_pod<CharType>::value, "Character type of basic_string must be a POD");
+  //对于同一个string，其底层字符类型必须和萃取字符方法所获得的字符类型相同
   static_assert(std::is_same<CharType, typename traits_type::char_type>::value,
                 "CharType must be same as traits_type::char_type");
 
@@ -307,8 +309,8 @@ public:
   // if (str.find('a') != string::npos) { /* do something */ }
   static constexpr size_type npos = static_cast<size_type>(-1);
 
-private:
-  iterator  buffer_;  // 储存字符串的起始位置
+private://注意这里是私有的，对象无法访问
+  iterator  buffer_;  // 储存字符串的起始位置，其实是个指针
   size_type size_;    // 大小
   size_type cap_;     // 容量
 
@@ -324,7 +326,7 @@ public:
     fill_init(n, ch);
   }
 
-  basic_string(const basic_string& other, size_type pos)
+  basic_string(const basic_string& other, size_type pos)//复制构造
     :buffer_(nullptr), size_(0), cap_(0)
   {
     init_from(other.buffer_, pos, other.size_ - pos);
@@ -337,7 +339,7 @@ public:
 
   basic_string(const_pointer str)
     :buffer_(nullptr), size_(0), cap_(0)
-  {
+  {//init_from需要指定开始位置和字符个数，这里是完全复制
     init_from(str, 0, char_traits::length(str));
   }
   basic_string(const_pointer str, size_type count)
@@ -346,8 +348,10 @@ public:
     init_from(str, 0, count);
   }
 
-  template <class Iter, typename std::enable_if<
-    mystl::is_input_iterator<Iter>::value, int>::type = 0>
+  template <class Iter, typename std::enable_if<mystl::is_input_iterator<Iter>::value, int>::type = 0>
+  //注意这是一个构造函数，没有返回值，这是用两个迭代器之间的值去初始化basic_string
+  //Iter是模板构造函数的模板参数，另一个参数是一个类型，如果Iter迭代器是输入迭代器，那么类型为int，并且有默认值0
+  //否则的话另一个参数不存在
   basic_string(Iter first, Iter last)
   { copy_init(first, last, iterator_category(first)); }
 
@@ -358,32 +362,35 @@ public:
   }
   basic_string(basic_string&& rhs) noexcept
     :buffer_(rhs.buffer_), size_(rhs.size_), cap_(rhs.cap_)
-  {
+  {//转移构造函数，临时对象会被销毁
     rhs.buffer_ = nullptr;
     rhs.size_ = 0;
     rhs.cap_ = 0;
   }
 
-  basic_string& operator=(const basic_string& rhs);
-  basic_string& operator=(basic_string&& rhs) noexcept;
+  basic_string& operator=(const basic_string& rhs);//拷贝赋值
+  basic_string& operator=(basic_string&& rhs) noexcept;//移动赋值
 
   basic_string& operator=(const_pointer str);
   basic_string& operator=(value_type ch);
 
-  ~basic_string() { destroy_buffer(); }
+  ~basic_string() { destroy_buffer(); }//析构函数非虚
 
 public:
   // 迭代器相关操作
-  iterator               begin()         noexcept
+  iterator/*这是返回值*/               begin()         noexcept
   { return buffer_; }
   const_iterator         begin()   const noexcept
-  { return buffer_; }
+  { return buffer_; }//对于常对象来说，this指针是const的，无法调用上面那个普通的成员函数，只能调用这个常成员函数
+                     //而常对象和非常对象都能调用这个const函数，那为什么还需要上面那个函数？
   iterator               end()           noexcept
-  { return buffer_ + size_; }
+  { return buffer_ + size_; }//最后一个字符后面的位置
   const_iterator         end()     const noexcept
   { return buffer_ + size_; }
 
   reverse_iterator       rbegin()        noexcept
+  //end()返回尾指针，reverse_iterator是mystl::reverse_iterator<iterator>这个类的别名，end()返回的指针作为这个类构造函数的参数
+      //从而构造出一个reverse_iterator的对象，返回
   { return reverse_iterator(end()); }
   const_reverse_iterator rbegin()  const noexcept
   { return const_reverse_iterator(end()); }
@@ -412,17 +419,21 @@ public:
   size_type capacity() const noexcept
   { return cap_; }
   size_type max_size() const noexcept
-  { return static_cast<size_type>(-1); }
+  { return static_cast<size_type>(-1); }//-1的二进制表示全都是1，将其转换为size_type就能得到最大的值，这样在各种机器上都能适用
 
   void      reserve(size_type n);
+  //reserve：调整string大小，使之可以容纳n个元素，如果当前容量小于n，则扩展容量至n，其他情况则不进行存储重新分配，对容量没有影响
   void      shrink_to_fit();
+  //减少容器的容量以适应其大小并销毁超出容量的所有元素。
+
 
   // 访问元素相关操作
-  reference       operator[](size_type n) 
+  reference       operator[](size_type n) //注意这里返回的是引用，所以才能改变元素值，参数是下标
   {
-    MYSTL_DEBUG(n <= size_);
+    MYSTL_DEBUG(n <= size_);//下标不能大于size
     if (n == size_)
-      *(buffer_ + n) = value_type();
+      *(buffer_ + n) = value_type();//value_type是一个类型，这里在内存末尾的位置构造了一个value_type对象，
+                                    //因为内存分配器的底层对象和value_type是一样的,所以可以构造
     return *(buffer_ + n); 
   }
   const_reference operator[](size_type n) const
@@ -448,7 +459,7 @@ public:
 
   reference       front() 
   { 
-    MYSTL_DEBUG(!empty());
+    MYSTL_DEBUG(!empty());//字符替换，执行点仍然在这里相当于assert(!empty())
     return *begin(); 
   }
   const_reference front() const 
@@ -460,7 +471,7 @@ public:
   reference       back() 
   {
     MYSTL_DEBUG(!empty()); 
-    return *(end() - 1); 
+    return *(end() - 1); //实际上是对指针减1
   }
   const_reference back()  const
   {
@@ -469,9 +480,9 @@ public:
   }
 
   const_pointer   data()  const noexcept
-  { return to_raw_pointer(); }
+  { return to_raw_pointer(); }//返回原始的头指针
   const_pointer   c_str() const noexcept
-  { return to_raw_pointer(); }
+  { return to_raw_pointer(); }//c_str()就是将string转化为字符串数组,生成一个const指针
 
   // 添加删除相关操作
 
@@ -488,39 +499,39 @@ public:
   { append(1, ch); }
   void     pop_back()
   {
-    MYSTL_DEBUG(!empty());
-    --size_;
+    MYSTL_DEBUG(!empty());//非空才能弹出元素
+    --size_;//这里并没有把内存空间析构掉，而是直接减少了size，即使那个内存上已经存了对象也忽略掉了，最后会一起析构
   }
 
   // append
-  basic_string& append(size_type count, value_type ch);
+  basic_string& append(size_type count, value_type ch);//加入count个ch字符
 
-  basic_string& append(const basic_string& str)
-  { return append(str, 0, str.size_); }
-  basic_string& append(const basic_string& str, size_type pos)
-  { return append(str, pos, str.size_ - pos); }
+  basic_string& append(const basic_string& str)//把另一个string加进来
+  { return append(str, 0, str.size_); }//调用513行的append
+  basic_string& append(const basic_string& str, size_type pos)//把另一个string[pos:end)的部分加进来
+  { return append(str, pos, str.size_ - pos); }//调用513行的append
   basic_string& append(const basic_string& str, size_type pos, size_type count);
 
-  basic_string& append(const_pointer s)
-  { return append(s, char_traits::length(s)); }
+  basic_string& append(const_pointer s)//s是字符串数组的首地址
+  { return append(s, char_traits::length(s)); }//length函数的输入参数是首地址，计算字符串数组的长度，调用的是下面的append
   basic_string& append(const_pointer s, size_type count);
 
   template <class Iter, typename std::enable_if<
-    mystl::is_input_iterator<Iter>::value, int>::type = 0>
+    mystl::is_input_iterator<Iter>::value, int>::type = 0>//Iter需要是输入迭代器，由于前向、双向、随机访问迭代器都是继承自输入迭代器，因此这些迭代器都可以
   basic_string& append(Iter first, Iter last)
   { return append_range(first, last); }
 
   // erase /clear
-  iterator erase(const_iterator pos);
+  iterator erase(const_iterator pos);//返回迭代器，删除从pos开始的所有字符
   iterator erase(const_iterator first, const_iterator last);
 
   // resize
   void resize(size_type count)
-  { resize(count, value_type()); }
+  { resize(count, value_type()); }//默认构造一个value_type对象？
   void resize(size_type count, value_type ch);
 
   void     clear() noexcept
-  { size_ = 0; }
+  { size_ = 0; }//只是把size变成0了
 
   // basic_string 相关操作
 
@@ -534,25 +545,25 @@ public:
   int compare(size_type pos1, size_type count1, const_pointer s, size_type count2) const;
 
   // substr
-  basic_string substr(size_type index, size_type count = npos)
+  basic_string substr(size_type index, size_type count = npos)//因为构造的是一个临时对象，所以不能返回引用或指针
   {
-    count = mystl::min(count, size_ - index);
-    return basic_string(buffer_ + index, buffer_ + index + count);
+    count = mystl::min(count, size_ - index);//最多到末尾
+    return basic_string(buffer_ + index, buffer_ + index + count);//构造一个临时对象返回
   }
 
   // replace
   basic_string& replace(size_type pos, size_type count, const basic_string& str)
   {
     THROW_OUT_OF_RANGE_IF(pos > size_, "basic_string<Char, Traits>::replace's pos out of range");
-    return replace_cstr(buffer_ + pos, count, str.buffer_, str.size_);
+    return replace_cstr(buffer_ + pos, count, str.buffer_, str.size_);//调用1763行的函数
   }
   basic_string& replace(const_iterator first, const_iterator last, const basic_string& str)
   {
-    MYSTL_DEBUG(begin() <= first && last <= end() && first <= last);
+    MYSTL_DEBUG(begin() <= first && last <= end() && first <= last);//同类型指针可以比大小
     return replace_cstr(first, static_cast<size_type>(last - first), str.buffer_, str.size_);
   }
 
-  basic_string& replace(size_type pos, size_type count, const_pointer str)
+  basic_string& replace(size_type pos, size_type count, const_pointer str)//用一个basic_string对象或字符串数组首地址都能代表这个内存中的字符串
   {
     THROW_OUT_OF_RANGE_IF(pos > size_, "basic_string<Char, Traits>::replace's pos out of range");
     return replace_cstr(buffer_ + pos, count, str, char_traits::length(str));
@@ -578,7 +589,7 @@ public:
   basic_string& replace(size_type pos, size_type count, size_type count2, value_type ch)
   {
     THROW_OUT_OF_RANGE_IF(pos > size_, "basic_string<Char, Traits>::replace's pos out of range");
-    return replace_fill(buffer_ + pos, count, count2, ch);
+    return replace_fill(buffer_ + pos, count, count2, ch);//填充
   }
   basic_string& replace(const_iterator first, const_iterator last, size_type count, value_type ch)
   {
@@ -652,29 +663,29 @@ public:
 public:
   // 重载 operator+= 
   basic_string& operator+=(const basic_string& str)
-  { return append(str); }
+  { return append(str); }//调用append拼接两个string
   basic_string& operator+=(value_type ch)
-  { return append(1, ch); }
+  { return append(1, ch); }//调用append拼接一个字符
   basic_string& operator+=(const_pointer str)
   { return append(str, str + char_traits::length(str)); }
 
   // 重载 operator >> / operatror <<
 
-  friend std::istream& operator >> (std::istream& is, basic_string& str)
+  friend std::istream& operator >> (std::istream& is, basic_string& str)//友元函数，相当于cin>>str，注意这个函数不是模板类的成员
   {
-    value_type* buf = new value_type[4096];
-    is >> buf;
-    basic_string tmp(buf);
-    str = std::move(tmp);
-    delete[]buf;
-    return is;
+    value_type* buf = new value_type[4096];//4096个字符的数组
+    is >> buf;//输入进去
+    basic_string tmp(buf);//利用字符数组构造string
+    str = std::move(tmp);//转移资源到目的string
+    delete[]buf;//注意这里的析构，否则会有内存泄漏，tmp是临时变量，离开函数之后就被析构了
+    return is;//这是为了方便连续输入，cin>>str1>>str2
   }
 
   friend std::ostream& operator << (std::ostream& os, const basic_string& str)
   {
     for (size_type i = 0; i < str.size_; ++i)
-      os << *(str.buffer_ + i);
-    return os;
+      os << *(str.buffer_ + i);//逐个字符输出
+    return os;//为了连续输出
   }
 
 private:
@@ -1577,14 +1588,14 @@ count(value_type ch, size_type pos) const noexcept
 // helper function
 
 // 尝试初始化一段 buffer，若分配失败则忽略，不会抛出异常
-template <class CharType, class CharTraits>
+template <class CharType, class CharTraits>//模板类的成员函数必须要写成这样
 void basic_string<CharType, CharTraits>::
 try_init() noexcept
 {
   try
   {
-    buffer_ = data_allocator::allocate(static_cast<size_type>(STRING_INIT_SIZE));
-    size_ = 0;
+    buffer_ = data_allocator::allocate(static_cast<size_type>(STRING_INIT_SIZE));//尝试分配32字节大小的空间
+    size_ = 0;//分配成功为什么size和cap还是0？
     cap_ = 0;
   }
   catch (...)
@@ -1601,16 +1612,17 @@ template <class CharType, class CharTraits>
 void basic_string<CharType, CharTraits>::
 fill_init(size_type n, value_type ch)
 {
-  const auto init_size = mystl::max(static_cast<size_type>(STRING_INIT_SIZE), n + 1);
+  const auto init_size = mystl::max(static_cast<size_type>(STRING_INIT_SIZE), n + 1);//最后一个空间用来存放\0
+  //如果申请的空间小于32字节，那么仍然申请32字节大小的空间
   buffer_ = data_allocator::allocate(init_size);
-  char_traits::fill(buffer_, ch, n);
-  size_ = n;
+  char_traits::fill(buffer_, ch, n);//调用的是20-210那些char_traits中的fill函数
+  size_ = n;//size是实际容量，而cap是总容量
   cap_ = init_size;
 }
 
 // copy_init 函数
-template <class CharType, class CharTraits>
-template <class Iter>
+template <class CharType, class CharTraits>//函数在模板类外定义，需要加上模板参数
+template <class Iter>//模板构造函数的第二个模板参数不一定存在，所以这里没有写
 void basic_string<CharType, CharTraits>::
 copy_init(Iter first, Iter last, mystl::input_iterator_tag)
 {
@@ -1619,7 +1631,7 @@ copy_init(Iter first, Iter last, mystl::input_iterator_tag)
   try
   {
     buffer_ = data_allocator::allocate(init_size);
-    size_ = n;
+    size_ = n;//为什么这里就不是0了？
     cap_ = init_size;
   }
   catch (...)
@@ -1627,10 +1639,10 @@ copy_init(Iter first, Iter last, mystl::input_iterator_tag)
     buffer_ = nullptr;
     size_ = 0;
     cap_ = 0;
-    throw;
+    throw;//这里会抛出异常
   }
-  for (; n > 0; --n, ++first)
-    append(*first);
+  for (; n > 0; --n, ++first)//这里是什么意思？
+    append(*first);//拷贝过来初始化？
 }
 
 template <class CharType, class CharTraits>
@@ -1660,12 +1672,14 @@ copy_init(Iter first, Iter last, mystl::forward_iterator_tag)
 template <class CharType, class CharTraits>
 void basic_string<CharType, CharTraits>::
 init_from(const_pointer src, size_type pos, size_type count)
-{
+{//可以给一个常量形参传入非常量，就比如这里我们给const_pointer传入的是other.buffer_，只是一个普通的指针
+    //从别的basic_string的内存中拷贝字符，src就是原地址，pos是从原地址的哪个字符开始拷贝，count是拷贝字符的个数
   const auto init_size = mystl::max(static_cast<size_type>(STRING_INIT_SIZE), count + 1);
   buffer_ = data_allocator::allocate(init_size);
-  char_traits::copy(buffer_, src + pos, count);
-  size_ = count;
-  cap_ = init_size;
+  //allocate返回的指针指向开始(最低的字节地址)分配的存储地址
+  char_traits::copy(buffer_, src + pos, count);//从src+pos的地址开始，拷贝count个字符到buffer_这块新申请的内存上
+  size_ = count;//实际大小是count个字符
+  cap_ = init_size;//容量就是申请的内存大小
 }
 
 // destroy_buffer 函数
@@ -1684,7 +1698,7 @@ destroy_buffer()
 
 // to_raw_pointer 函数
 template <class CharType, class CharTraits>
-typename basic_string<CharType, CharTraits>::const_pointer
+typename basic_string<CharType, CharTraits>::const_pointer//返回值是一个类型
 basic_string<CharType, CharTraits>::
 to_raw_pointer() const
 {
@@ -1712,10 +1726,10 @@ reinsert(size_type size)
 }
 
 // append_range，末尾追加一段 [first, last) 内的字符
-template <class CharType, class CharTraits>
-template <class Iter>
-basic_string<CharType, CharTraits>&
-basic_string<CharType, CharTraits>::
+template <class CharType, class CharTraits>//模板类的模板参数
+template <class Iter>//模板类的模板函数的模板参数
+basic_string<CharType, CharTraits>&//返回值，basic_string<CharType, CharTraits>用来实例化模板，生成类
+basic_string<CharType, CharTraits>:://表明这个函数是属于哪个类的成员函数
 append_range(Iter first, Iter last)
 {
   const size_type n = mystl::distance(first, last);
@@ -1749,19 +1763,19 @@ basic_string<CharType, CharTraits>::
 replace_cstr(const_iterator first, size_type count1, const_pointer str, size_type count2)
 {
   if (static_cast<size_type>(cend() - first) < count1)
-  {
+  {//原本字符串长度没有count1个字符，则不能够替换
     count1 = cend() - first;
   }
   if (count1 < count2)
   {
-    const size_type add = count2 - count1;
-    THROW_LENGTH_ERROR_IF(size_ > max_size() - add,
+    const size_type add = count2 - count1;//需要补充的字符个数
+    THROW_LENGTH_ERROR_IF(size_ > max_size() - add,//补充的字符太多以至于超过了最大长度
                           "basic_string<Char, Traits>'s size too big");
     if (size_ > cap_ - add)
-    {
+    {//补充的字符太多以至于超过了字符串容量，那么就需要重新申请一块内存
       reallocate(add);
     }
-    pointer r = const_cast<pointer>(first);
+    pointer r = const_cast<pointer>(first);//去掉const属性
     char_traits::move(r + count2, first + count1, end() - (first + count1));
     char_traits::copy(r, str, count2);
     size_ += add;
