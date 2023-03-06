@@ -55,7 +55,7 @@ struct char_traits
   }
 
   static char_type* move(char_type* dst, const char_type* src, size_t n)
-  {
+  {//转移n个字符
     char_type* r = dst;
     //注意这里对于空间重叠的处理
     if (dst < src)
@@ -734,14 +734,15 @@ private:
 
 // 复制赋值操作符
 template <class CharType, class CharTraits>
-basic_string<CharType, CharTraits>&
-basic_string<CharType, CharTraits>::
+basic_string<CharType, CharTraits>&//返回值
+basic_string<CharType, CharTraits>:://表明是哪个类的成员函数
 operator=(const basic_string& rhs)
 {
-  if (this != &rhs)
+  if (this != &rhs)//避免自赋值
   {
-    basic_string tmp(rhs);
-    swap(tmp);
+    basic_string tmp(rhs);//调用构造函数
+    swap(tmp);//调用move函数转移资源，相当于先把this给转移出去，再把rhs转移给this，再把转移出去的给rhs，
+              //这里就要求不能自赋值，因为this转移出去后对象就不存在了，rhs不存在
   }
   return *this;
 }
@@ -752,11 +753,11 @@ basic_string<CharType, CharTraits>&
 basic_string<CharType, CharTraits>::
 operator=(basic_string&& rhs) noexcept
 {
-  destroy_buffer();
-  buffer_ = rhs.buffer_;
+  destroy_buffer();//先销毁this，这里不需要考虑自赋值，因为销毁是绝对安全的
+  buffer_ = rhs.buffer_;//然后赋值
   size_ = rhs.size_;
   cap_ = rhs.cap_;
-  rhs.buffer_ = nullptr;
+  rhs.buffer_ = nullptr;//在销毁rhs
   rhs.size_ = 0;
   rhs.cap_ = 0;
   return *this;
@@ -771,12 +772,12 @@ operator=(const_pointer str)
   const size_type len = char_traits::length(str);
   if (cap_ < len)
   {
-    auto new_buffer = data_allocator::allocate(len + 1);
-    data_allocator::deallocate(buffer_);
-    buffer_ = new_buffer;
+    auto new_buffer = data_allocator::allocate(len + 1);//新申请一块内存
+    data_allocator::deallocate(buffer_);//销毁当前内存
+    buffer_ = new_buffer;//变成新的内存地址
     cap_ = len + 1;
   }
-  char_traits::copy(buffer_, str, len);
+  char_traits::copy(buffer_, str, len);//内存拷贝
   size_ = len;
   return *this;
 }
@@ -786,7 +787,7 @@ template <class CharType, class CharTraits>
 basic_string<CharType, CharTraits>&
 basic_string<CharType, CharTraits>::
 operator=(value_type ch)
-{
+{//和上面的一样
   if (cap_ < 1)
   {
     auto new_buffer = data_allocator::allocate(2);
@@ -801,16 +802,16 @@ operator=(value_type ch)
 
 // 预留储存空间
 template <class CharType, class CharTraits>
-void basic_string<CharType, CharTraits>::
+void basic_string<CharType, CharTraits>:://返回值为空
 reserve(size_type n)
 {
   if (cap_ < n)
   {
     THROW_LENGTH_ERROR_IF(n > max_size(), "n can not larger than max_size()"
                           "in basic_string<Char,Traits>::reserve(n)");
-    auto new_buffer = data_allocator::allocate(n);
-    char_traits::move(new_buffer, buffer_, size_);
-    buffer_ = new_buffer;
+    auto new_buffer = data_allocator::allocate(n);//申请一块新内存
+    char_traits::move(new_buffer, buffer_, size_);//把内容转移过去，move是内存操作，更快
+    buffer_ = new_buffer;//新地址
     cap_ = n;
   }
 }
@@ -828,19 +829,19 @@ shrink_to_fit()
 
 // 在 pos 处插入一个元素
 template <class CharType, class CharTraits>
-typename basic_string<CharType, CharTraits>::iterator
+typename basic_string<CharType, CharTraits>::iterator//返回一个迭代器
 basic_string<CharType, CharTraits>::
 insert(const_iterator pos, value_type ch)
 {
-  iterator r = const_cast<iterator>(pos);
+  iterator r = const_cast<iterator>(pos);//强行去掉const
   if (size_ == cap_)
-  {
+  {//已经装满了，要重新申请内存并填充
     return reallocate_and_fill(r, 1, ch);
   }
-  char_traits::move(r + 1, r, end() - r);
+  char_traits::move(r + 1, r, end() - r);//否则的话，把pos后面的原有字符都往后移动一个位置
   ++size_;
-  *r = ch;
-  return r;
+  *r = ch;//然后把这个位置插入ch
+  return r;//返回插入首地址
 }
 
 // 在 pos 处插入 n 个元素
@@ -853,24 +854,24 @@ insert(const_iterator pos, size_type count, value_type ch)
   if (count == 0)
     return r;
   if (cap_ - size_ < count)
-  {
+  {//内存不够
     return reallocate_and_fill(r, count, ch);
   }
   if (pos == end())
-  {
+  {//直接在末尾填充
     char_traits::fill(end(), ch, count);
     size_ += count;
     return r;
   }
-  char_traits::move(r + count, r, count);
-  char_traits::fill(r, ch, count);
+  char_traits::move(r + count, r, count);//移动count个位置
+  char_traits::fill(r, ch, count);//填充
   size_ += count;
   return r;
 }
 
 // 在 pos 处插入 [first, last) 内的元素
 template <class CharType, class CharTraits>
-template <class Iter>
+template <class Iter>//模板函数本身的模板参数
 typename basic_string<CharType, CharTraits>::iterator
 basic_string<CharType, CharTraits>::
 insert(const_iterator pos, Iter first, Iter last)
@@ -885,7 +886,7 @@ insert(const_iterator pos, Iter first, Iter last)
   }
   if (pos == end())
   {
-    mystl::uninitialized_copy(first, last, end());
+    mystl::uninitialized_copy(first, last, end());//Iter保证是输入迭代器？
     size_ += len;
     return r;
   }
@@ -901,13 +902,13 @@ basic_string<CharType, CharTraits>&
 basic_string<CharType, CharTraits>::
 append(size_type count, value_type ch)
 {
-  THROW_LENGTH_ERROR_IF(size_ > max_size() - count,
+  THROW_LENGTH_ERROR_IF(size_ > max_size() - count,//这里为什么不是和cap比较？意思是申请所有内存都不够才会报错？
                         "basic_string<Char, Tratis>'s size too big");
   if (cap_ - size_ < count)
   {
-    reallocate(count);
+    reallocate(count);//重新申请内存
   }
-  char_traits::fill(buffer_ + size_, ch, count);
+  char_traits::fill(buffer_ + size_, ch, count);//在末尾添加
   size_ += count;
   return *this;
 }
@@ -943,7 +944,7 @@ append(const_pointer s, size_type count)
   {
     reallocate(count);
   }
-  char_traits::copy(buffer_ + size_, s, count);
+  char_traits::copy(buffer_ + size_, s, count);//直接拷贝内存
   size_ += count;
   return *this;
 }
@@ -954,11 +955,11 @@ typename basic_string<CharType, CharTraits>::iterator
 basic_string<CharType, CharTraits>::
 erase(const_iterator pos)
 {
-  MYSTL_DEBUG(pos != end());
+  MYSTL_DEBUG(pos != end());//pos不能等于end，因为这里没有元素
   iterator r = const_cast<iterator>(pos);
-  char_traits::move(r, pos + 1, end() - pos - 1);
+  char_traits::move(r, pos + 1, end() - pos - 1);//把后面的元素往前面覆盖，而不是全部移动
   --size_;
-  return r;
+  return r;//返回删除后原位置的迭代器
 }
 
 // 删除 [first, last) 的元素
@@ -973,8 +974,10 @@ erase(const_iterator first, const_iterator last)
     return end();
   }
   const size_type n = end() - last;
-  iterator r = const_cast<iterator>(first);
-  char_traits::move(r, last, n);
+  iterator r = const_cast<iterator>(first);//为啥要先去掉const？因为move、copy这些函数会改变迭代器的值，所以不能是const
+  char_traits::move(r, last, n);//char_traits是别名，已经声明过模板的参数，所以char_traits直接代表一个类，而move是这个类中的静态成员函数
+  //所以这里相当于是mystl::char_traits<CharType>::move(r,last,n)，会根据不同CharType分别调用特例化的函数
+  //直接把last后面的元素移动到first的位置上实现覆盖
   size_ -= (last - first);
   return r;
 }
@@ -985,12 +988,12 @@ void basic_string<CharType, CharTraits>::
 resize(size_type count, value_type ch)
 {
   if (count < size_)
-  {
-    erase(buffer_ + count, buffer_ + size_);
+  {//直接删除多余的
+      this->erase(buffer_ + count, buffer_ + size_);
   }
   else
-  {
-    append(count - size_, ch);
+  {//再加上一些字符
+      this->append(count - size_, ch);
   }
 }
 
@@ -998,7 +1001,7 @@ resize(size_type count, value_type ch)
 template <class CharType, class CharTraits>
 int basic_string<CharType, CharTraits>::
 compare(const basic_string& other) const
-{
+{//其实就是比较字符数组
   return compare_cstr(buffer_, size_, other.buffer_, other.size_);
 }
 
@@ -1007,7 +1010,7 @@ template <class CharType, class CharTraits>
 int basic_string<CharType, CharTraits>::
 compare(size_type pos1, size_type count1, const basic_string& other) const
 {
-  auto n1 = mystl::min(count1, size_ - pos1);
+  auto n1 = mystl::min(count1, size_ - pos1);//最多比较这么多字符
   return compare_cstr(buffer_ + pos1, n1, other.buffer_, other.size_);
 }
 
@@ -1689,7 +1692,7 @@ destroy_buffer()
 {
   if (buffer_ != nullptr)
   {
-    data_allocator::deallocate(buffer_, cap_);
+    data_allocator::deallocate(buffer_, cap_);//销毁内存空间
     buffer_ = nullptr;
     size_ = 0;
     cap_ = 0;
@@ -1711,16 +1714,16 @@ template <class CharType, class CharTraits>
 void basic_string<CharType, CharTraits>::
 reinsert(size_type size)
 {
-  auto new_buffer = data_allocator::allocate(size);
+  auto new_buffer = data_allocator::allocate(size);//申请新内存
   try
   {
-    char_traits::move(new_buffer, buffer_, size);
+    char_traits::move(new_buffer, buffer_, size);//尝试转移
   }
   catch (...)
   {
-    data_allocator::deallocate(new_buffer);
+    data_allocator::deallocate(new_buffer);//抛出任何异常都把新内存释放掉，然后结束此函数运行
   }
-  buffer_ = new_buffer;
+  buffer_ = new_buffer;//没有发生异常就把新地址换过去，数据已经在try里面转移了
   size_ = size;
   cap_ = size;
 }
@@ -1749,9 +1752,9 @@ int basic_string<CharType, CharTraits>::
 compare_cstr(const_pointer s1, size_type n1, const_pointer s2, size_type n2) const
 {
   auto rlen = mystl::min(n1, n2);
-  auto res = char_traits::compare(s1, s2, rlen);
+  auto res = char_traits::compare(s1, s2, rlen);//只比较rlen这么长的字符
   if (res != 0) return res;
-  if (n1 < n2) return -1;
+  if (n1 < n2) return -1;//等于0说明上面比较的字符都是相同的，那么谁短谁就在前面
   if (n1 > n2) return 1;
   return 0;
 }
@@ -1875,19 +1878,19 @@ template <class CharType, class CharTraits>
 typename basic_string<CharType, CharTraits>::iterator
 basic_string<CharType, CharTraits>::
 reallocate_and_fill(iterator pos, size_type n, value_type ch)
-{
+{//重新申请内存，并插入n个ch
   const auto r = pos - buffer_;
   const auto old_cap = cap_;
-  const auto new_cap = mystl::max(old_cap + n, old_cap + (old_cap >> 1));
+  const auto new_cap = mystl::max(old_cap + n, old_cap + (old_cap >> 1));//如果n小于old_cap的一半，则直接申请一半的内存
   auto new_buffer = data_allocator::allocate(new_cap);
-  auto e1 = char_traits::move(new_buffer, buffer_, r) + r;
-  auto e2 = char_traits::fill(e1, ch, n) + n;
-  char_traits::move(e2, buffer_ + r, size_ - r);
-  data_allocator::deallocate(buffer_, old_cap);
+  auto e1 = char_traits::move(new_buffer, buffer_, r) + r;//move把原始数据的r个元素移动到新内存，返回的是新地址的首迭代器，再加上r
+  auto e2 = char_traits::fill(e1, ch, n) + n;//然后填充n个ch到新内存的末尾
+  char_traits::move(e2, buffer_ + r, size_ - r);//再把原始数据剩余的元素移动到新内存
+  data_allocator::deallocate(buffer_, old_cap);//析构原内存
   buffer_ = new_buffer;
   size_ += n;
   cap_ = new_cap;
-  return buffer_ + r;
+  return buffer_ + r;//返回的是插入字符的首地址
 }
 
 // reallocate_and_copy 函数
