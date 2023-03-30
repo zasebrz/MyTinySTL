@@ -45,7 +45,7 @@ unchecked_uninit_copy(InputIter first, InputIter last, ForwardIter result, std::
 
 template <class InputIter, class ForwardIter>
 ForwardIter uninitialized_copy(InputIter first, InputIter last, ForwardIter result)
-{
+{//未初始化的拷贝？
   return mystl::unchecked_uninit_copy(first, last, result, 
                                      std::is_trivially_copy_assignable<
                                      typename iterator_traits<ForwardIter>::
@@ -112,7 +112,7 @@ unchecked_uninit_fill(ForwardIter first, ForwardIter last, const T& value, std::
   {
     for (; cur != last; ++cur)
     {
-      mystl::construct(&*cur, value);
+      mystl::construct(&*cur, value);//cur是迭代器，先取值得到对象，再取地址
     }
   }
   catch (...)
@@ -151,7 +151,7 @@ unchecked_uninit_fill_n(ForwardIter first, Size n, const T& value, std::false_ty
   {
     for (; n > 0; --n, ++cur)
     {
-      mystl::construct(&*cur, value);
+      mystl::construct(&*cur, value);//构造元素
     }
   }
   catch (...)

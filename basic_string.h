@@ -374,7 +374,7 @@ public:
   basic_string& operator=(const_pointer str);
   basic_string& operator=(value_type ch);
 
-  ~basic_string() { destroy_buffer(); }//析构函数非虚
+  ~basic_string() { destroy_buffer(); }//析构函数非虚，涉及到额外的内存就需要自定义析构函数
 
 public:
   // 迭代器相关操作
@@ -1060,7 +1060,7 @@ reverse() noexcept
 {
   for (auto i = begin(), j = end(); i < j;)
   {
-    mystl::iter_swap(i++, --j);
+    mystl::iter_swap(i++, --j);//不管是什么对象（内置类型或者自定义的类）都可以进行交换操作
   }
 }
 
@@ -1070,7 +1070,7 @@ void basic_string<CharType, CharTraits>::
 swap(basic_string& rhs) noexcept
 {
   if (this != &rhs)
-  {
+  {//防止自交换，因为mystl::swap会现将lhs给转成右值转移给临时对象
     mystl::swap(buffer_, rhs.buffer_);
     mystl::swap(size_, rhs.size_);
     mystl::swap(cap_, rhs.cap_);
@@ -1079,7 +1079,7 @@ swap(basic_string& rhs) noexcept
 
 // 从下标 pos 开始查找字符为 ch 的元素，若找到返回其下标，否则返回 npos
 template <class CharType, class CharTraits>
-typename basic_string<CharType, CharTraits>::size_type
+typename basic_string<CharType, CharTraits>::size_type//返回一个size_type的下标
 basic_string<CharType, CharTraits>::
 find(value_type ch, size_type pos) const noexcept
 {
@@ -1088,7 +1088,7 @@ find(value_type ch, size_type pos) const noexcept
     if (*(buffer_ + i) == ch)
       return i;
   }
-  return npos;
+  return this->npos;
 }
 
 // 从下标 pos 开始查找字符串 str，若找到返回起始位置的下标，否则返回 npos
@@ -1097,27 +1097,27 @@ typename basic_string<CharType, CharTraits>::size_type
 basic_string<CharType, CharTraits>::
 find(const_pointer str, size_type pos) const noexcept
 {
-  const auto len = char_traits::length(str);
+  const auto len = char_traits::length(str);//注意str是一个数组指针，因此需要专门针对指针进行操作
   if (len == 0)
     return pos;
-  if (size_ - pos < len)
+  if (size_ - pos < len)//长度已经超过限制了
     return npos;
-  const auto left = size_ - len;
+  const auto left = size_ - len;//最后一个可以比较的下标位置，提前限制的话就不需要在担心越界了
   for (auto i = pos; i <= left; ++i)
   {
     if (*(buffer_ + i) == *str)
     {
       size_type j = 1;
       for (; j < len; ++j)
-      {
+      {//逐个比较
         if (*(buffer_ + i + j) != *(str + j))
           break;
       }
-      if (j == len)
+      if (j == len)//比较完成，找到了这个字符串，返回左下标
         return i;
     }
   }
-  return npos;
+  return npos;//否则返回npos
 }
 
 // 从下标 pos 开始查找字符串 str 的前 count 个字符，若找到返回起始位置的下标，否则返回 npos
@@ -1152,9 +1152,9 @@ find(const_pointer str, size_type pos, size_type count) const noexcept
 template <class CharType, class CharTraits>
 typename basic_string<CharType, CharTraits>::size_type
 basic_string<CharType, CharTraits>::
-find(const basic_string& str, size_type pos) const noexcept
+find(const basic_string& str, size_type pos) const noexcept//上面字符串用指针表示，这里用string表示
 {
-  const size_type count = str.size_;
+  const size_type count = str.size_;//这里就不需要对指针操作了
   if (count == 0)
     return pos;
   if (size_ - pos < count)
@@ -1185,12 +1185,13 @@ rfind(value_type ch, size_type pos) const noexcept
 {
   if (pos >= size_)
     pos = size_ - 1;
-  for (auto i = pos; i != 0; --i)
+  for (auto i = pos; i != 0; --i)//没有判断0位置，因为没办法判断，如果写成i>=0的话由于i是一个size_type,永远不会出现负数，那么循环会一直进行
+                                 //写成i>0也可以，效果相同
   {
     if (*(buffer_ + i) == ch)
       return i;
   }
-  return front() == ch ? 0 : npos;
+  return front() == ch ? 0 : npos;//单独判断0下标
 }
 
 // 从下标 pos 开始反向查找字符串 str，与 find 类似
@@ -1217,20 +1218,20 @@ rfind(const_pointer str, size_type pos) const noexcept
     }
     default:
     { // len >= 2
-      for (auto i = pos; i >= len - 1; --i)
+      for (auto i = pos; i >= len - 1; --i)//i是末尾字符下标
       {
-        if (*(buffer_ + i) == *(str + len - 1))
+        if (*(buffer_ + i) == *(str + len - 1))//这里是从后往前比较
         {
           size_type j = 1;
           for (; j < len; ++j)
           {
-            if (*(buffer_ + i - j) != *(str + len - j - 1))
+            if (*(buffer_ + i - j) != *(str + len - j - 1))//往前比较
               break;
           }
           if (j == len)
-            return i - len + 1;
+            return i - len + 1;//反向比较，因此返回的是末尾字符的下标
         }
-      }
+      }//Switch语句的case里面都要有break或者return
       break;
     }
   }
@@ -1329,7 +1330,7 @@ find_first_of(const_pointer s, size_type pos) const noexcept
   return npos;
 }
 
-// 从下标 pos 开始查找字符串 s 
+// 从下标 pos 开始查找字符串 s 的[0:count)个其中的一个字符出现的第一个位置
 template <class CharType, class CharTraits>
 typename basic_string<CharType, CharTraits>::size_type
 basic_string<CharType, CharTraits>::
@@ -1438,7 +1439,7 @@ find_first_not_of(const basic_string& str, size_type pos) const noexcept
 template <class CharType, class CharTraits>
 typename basic_string<CharType, CharTraits>::size_type
 basic_string<CharType, CharTraits>::
-find_last_of(value_type ch, size_type pos) const noexcept
+find_last_of(value_type ch, size_type pos) const noexcept//和rfind差不多
 {
   for (auto i = size_ - 1; i >= pos; --i)
   {
@@ -1598,7 +1599,7 @@ try_init() noexcept
   try
   {
     buffer_ = data_allocator::allocate(static_cast<size_type>(STRING_INIT_SIZE));//尝试分配32字节大小的空间
-    size_ = 0;//分配成功为什么size和cap还是0？
+    size_ = 0;//分配成功为什么size和cap还是0？因为调用这个函数只有是默认构造函数里面，没有任何初始化工作
     cap_ = 0;
   }
   catch (...)
@@ -1633,8 +1634,8 @@ copy_init(Iter first, Iter last, mystl::input_iterator_tag)
   const auto init_size = mystl::max(static_cast<size_type>(STRING_INIT_SIZE), n + 1);
   try
   {
-    buffer_ = data_allocator::allocate(init_size);
-    size_ = n;//为什么这里就不是0了？
+    buffer_ = data_allocator::allocate(init_size);//这里只是申请内存，有可能会有异常，所以要写到try里面
+    size_ = n;//为什么这里就不是0了？因为这里初始化了，需要往内存里构造对象
     cap_ = init_size;
   }
   catch (...)
@@ -1644,14 +1645,14 @@ copy_init(Iter first, Iter last, mystl::input_iterator_tag)
     cap_ = 0;
     throw;//这里会抛出异常
   }
-  for (; n > 0; --n, ++first)//这里是什么意思？
-    append(*first);//拷贝过来初始化？
+  for (; n > 0; --n, ++first)//这里是什么意思？申请内存再把
+    append(*first);//拷贝过来初始化？这里调用的是哪个函数？似乎是没有实现输入迭代器版本的append
 }
 
 template <class CharType, class CharTraits>
 template <class Iter>
 void basic_string<CharType, CharTraits>::
-copy_init(Iter first, Iter last, mystl::forward_iterator_tag)
+copy_init(Iter first, Iter last, mystl::forward_iterator_tag)//常用的是这个前向迭代器版本的
 {
   const size_type n = mystl::distance(first, last);
   const auto init_size = mystl::max(static_cast<size_type>(STRING_INIT_SIZE), n + 1);
@@ -1667,7 +1668,7 @@ copy_init(Iter first, Iter last, mystl::forward_iterator_tag)
     buffer_ = nullptr;
     size_ = 0;
     cap_ = 0;
-    throw;
+    throw;//这里不做处理，等上层函数处理
   }
 }
 
@@ -1705,11 +1706,13 @@ typename basic_string<CharType, CharTraits>::const_pointer//返回值是一个�
 basic_string<CharType, CharTraits>::
 to_raw_pointer() const
 {
-  *(buffer_ + size_) = value_type();
+  *(buffer_ + size_) = value_type();//在末尾的位置构造一个默认对象（就是字符数组末尾默认的/0），如果没有这个构造，转换成指针后，如果用指针去访问内存，那么最后一个内存
+                                    //的地方由于没有构造结束符/0。那么会越界访问出错，而上层迭代器就不需要担心这个，因为封装以后保证迭代器
+                                    //不会越界访问，指针没有约束就无法保证
   return buffer_;
 }
 
-// reinsert 函数
+// reinsert 函数，只用来缩小空间？没找到其他用法，为什么不直接合并？
 template <class CharType, class CharTraits>
 void basic_string<CharType, CharTraits>::
 reinsert(size_type size)
@@ -1778,7 +1781,7 @@ replace_cstr(const_iterator first, size_type count1, const_pointer str, size_typ
     {//补充的字符太多以至于超过了字符串容量，那么就需要重新申请一块内存
       reallocate(add);
     }
-    pointer r = const_cast<pointer>(first);//去掉const属性
+    pointer r = const_cast<pointer>(first);//去掉const属性，因为下面要修改
     char_traits::move(r + count2, first + count1, end() - (first + count1));
     char_traits::copy(r, str, count2);
     size_ += add;
@@ -1860,15 +1863,15 @@ replace_copy(const_iterator first, const_iterator last, Iter first2, Iter last2)
   return *this;
 }
 
-// reallocate 函数
+// reallocate 函数，重新申请一块内存
 template <class CharType, class CharTraits>
 void basic_string<CharType, CharTraits>::
 reallocate(size_type need)
 {
   const auto new_cap = mystl::max(cap_ + need, cap_ + (cap_ >> 1));
-  auto new_buffer = data_allocator::allocate(new_cap);
-  char_traits::move(new_buffer, buffer_, size_);
-  data_allocator::deallocate(buffer_);
+  auto new_buffer = data_allocator::allocate(new_cap);//新内存的地址
+  char_traits::move(new_buffer, buffer_, size_);//转移数据
+  data_allocator::deallocate(buffer_);//释放原有内存
   buffer_ = new_buffer;
   cap_ = new_cap;
 }
@@ -1878,7 +1881,7 @@ template <class CharType, class CharTraits>
 typename basic_string<CharType, CharTraits>::iterator
 basic_string<CharType, CharTraits>::
 reallocate_and_fill(iterator pos, size_type n, value_type ch)
-{//重新申请内存，并插入n个ch
+{//重新申请内存，并在pos的地方插入n个ch
   const auto r = pos - buffer_;
   const auto old_cap = cap_;
   const auto new_cap = mystl::max(old_cap + n, old_cap + (old_cap >> 1));//如果n小于old_cap的一半，则直接申请一半的内存
@@ -1898,7 +1901,7 @@ template <class CharType, class CharTraits>
 typename basic_string<CharType, CharTraits>::iterator
 basic_string<CharType, CharTraits>::
 reallocate_and_copy(iterator pos, const_iterator first, const_iterator last)
-{
+{//重新申请内存，并在pos的地方拷贝[first,last)
   const auto r = pos - buffer_;
   const auto old_cap = cap_;
   const size_type n = mystl::distance(first, last);
@@ -1917,44 +1920,48 @@ reallocate_and_copy(iterator pos, const_iterator first, const_iterator last)
 /*****************************************************************************************/
 // 重载全局操作符
 
-// 重载 operator+
-template <class CharType, class CharTraits>
-basic_string<CharType, CharTraits>
+// 重载 operator+，这是函数重载，不是成员函数，string+string
+template <class CharType, class CharTraits>//函数模板参数
+basic_string<CharType, CharTraits>//返回值是basic_string的对象，不是指针、引用
 operator+(const basic_string<CharType, CharTraits>& lhs, 
-          const basic_string<CharType, CharTraits>& rhs)
+          const basic_string<CharType, CharTraits>& rhs)//两个参数
 {
-  basic_string<CharType, CharTraits> tmp(lhs);
-  tmp.append(rhs);
-  return tmp;
+  basic_string<CharType, CharTraits> tmp(lhs);//拷贝构造一个临时对象
+  tmp.append(rhs);//加到后面
+  return tmp;//临时对象不能返回指针、引用
 }
 
+//const char数组 + string
 template <class CharType, class CharTraits>
-basic_string<CharType, CharTraits>
+basic_string<CharType, CharTraits>//仍然返回一个string
 operator+(const CharType* lhs, const basic_string<CharType, CharTraits>& rhs)
 {
-  basic_string<CharType, CharTraits> tmp(lhs);
+  basic_string<CharType, CharTraits> tmp(lhs);//注意lhs是一个数组的首地址，这里调用的是340行的构造函数
   tmp.append(rhs);
   return tmp;
 }
 
+//char + string
 template <class CharType, class CharTraits>
 basic_string<CharType, CharTraits>
 operator+(CharType ch, const basic_string<CharType, CharTraits>& rhs)
 {
-  basic_string<CharType, CharTraits> tmp(1, ch);
+  basic_string<CharType, CharTraits> tmp(1, ch);//注意ch是一个字符，这里调用的是323行的构造函数
   tmp.append(rhs);
   return tmp;
 }
 
+//string + const char数组
 template <class CharType, class CharTraits>
 basic_string<CharType, CharTraits>
 operator+(const basic_string<CharType, CharTraits>& lhs, const CharType* rhs)
 {
-  basic_string<CharType, CharTraits> tmp(lhs);
-  tmp.append(rhs);
+  basic_string<CharType, CharTraits> tmp(lhs);//拷贝构造
+  tmp.append(rhs);//注意rhs是指针，调用的是515行的append
   return tmp;
 }
 
+//string + char
 template <class CharType, class CharTraits>
 basic_string<CharType, CharTraits>
 operator+(const basic_string<CharType, CharTraits>& lhs, CharType ch)
@@ -1964,26 +1971,29 @@ operator+(const basic_string<CharType, CharTraits>& lhs, CharType ch)
   return tmp;
 }
 
+//右值string+string，调用形式：res=string("abcde")+str1，前面是临时对象，后面是左值
 template <class CharType, class CharTraits>
 basic_string<CharType, CharTraits>
 operator+(basic_string<CharType, CharTraits>&& lhs,
           const basic_string<CharType, CharTraits>& rhs)
 {
-  basic_string<CharType, CharTraits> tmp(mystl::move(lhs));
+  basic_string<CharType, CharTraits> tmp(mystl::move(lhs));//转移构造
   tmp.append(rhs);
   return tmp;
 }
 
+//string+右值string，调用形式：res=str1+string("abcde")，前面是左值，后面是临时对象
 template <class CharType, class CharTraits>
 basic_string<CharType, CharTraits>
 operator+(const basic_string<CharType, CharTraits>& lhs,
           basic_string<CharType, CharTraits>&& rhs)
 {
   basic_string<CharType, CharTraits> tmp(mystl::move(rhs));
-  tmp.insert(tmp.begin(), lhs.begin(), lhs.end());
+  tmp.insert(tmp.begin(), lhs.begin(), lhs.end());//这里用的就是插入了，可能是为了避免拷贝构造
   return tmp;
 }
 
+//右值string+右值string，调用形式：res=string("ab")+string("cde")
 template <class CharType, class CharTraits>
 basic_string<CharType, CharTraits>
 operator+(basic_string<CharType, CharTraits>&& lhs,
@@ -1994,6 +2004,7 @@ operator+(basic_string<CharType, CharTraits>&& lhs,
   return tmp;
 }
 
+//const char数组+右值string，调用形式：res="ab"+string("cde")
 template <class CharType, class CharTraits>
 basic_string<CharType, CharTraits>
 operator+(const CharType* lhs, basic_string<CharType, CharTraits>&& rhs)
@@ -2003,6 +2014,7 @@ operator+(const CharType* lhs, basic_string<CharType, CharTraits>&& rhs)
   return tmp;
 }
 
+//char+右值string，调用形式：res='a'+string("cde")
 template <class CharType, class CharTraits>
 basic_string<CharType, CharTraits>
 operator+(CharType ch, basic_string<CharType, CharTraits>&& rhs)
@@ -2012,6 +2024,7 @@ operator+(CharType ch, basic_string<CharType, CharTraits>&& rhs)
   return tmp;
 }
 
+//右值string+const char数组，调用形式：res=string("cde")+"ab"
 template <class CharType, class CharTraits>
 basic_string<CharType, CharTraits>
 operator+(basic_string<CharType, CharTraits>&& lhs, const CharType* rhs)
@@ -2021,6 +2034,7 @@ operator+(basic_string<CharType, CharTraits>&& lhs, const CharType* rhs)
   return tmp;
 }
 
+//右值string+char，调用形式：res=string("cde")+'a'
 template <class CharType, class CharTraits>
 basic_string<CharType, CharTraits>
 operator+(basic_string<CharType, CharTraits>&& lhs, CharType ch)
@@ -2073,7 +2087,7 @@ bool operator>=(const basic_string<CharType, CharTraits>& lhs,
   return lhs.compare(rhs) >= 0;
 }
 
-// 重载 mystl 的 swap
+// 重载 mystl 的 swap，也就是当调用swap(str1,str2)的时候，就会调用这个函数
 template <class CharType, class CharTraits>
 void swap(basic_string<CharType, CharTraits>& lhs,
           basic_string<CharType, CharTraits>& rhs) noexcept
@@ -2090,7 +2104,7 @@ struct hash<basic_string<CharType, CharTraits>>
     return bitwise_hash((const unsigned char*)str.c_str(),
                         str.size() * sizeof(CharType));
   }
-};
+};//这是一个特例化的类，后面要加上分号
 
 } // namespace mystl
 #endif // !MYTINYSTL_BASIC_STRING_H_
